@@ -1,26 +1,383 @@
-@import "tailwindcss";
+@import 'tailwindcss';
+
+/*
+ * Kabootar Talk's design language.
+ *
+ * Bright, chunky and friendly, in the manner of Duolingo: heavy rounded
+ * shapes, solid blocks of colour, buttons with real depth you can press, and
+ * type that is a size bigger than feels necessary. The point is that a slow,
+ * patient app should still feel warm and alive to open.
+ *
+ * Two rules keep it coherent:
+ *   1. Every interactive surface is a solid colour with a darker edge beneath
+ *      it. Nothing is a gradient, nothing is translucent, nothing glows.
+ *   2. Colour carries meaning. Green is go, blue is the sky and the journey,
+ *      amber is waiting, red is stop. Nothing is coloured for decoration.
+ */
+@theme {
+  /* --- the palette ------------------------------------------------------- */
+  --color-grass-400: #6ee034;
+  --color-grass-500: #58cc02;
+  --color-grass-600: #46a302;
+  --color-grass-100: #e8f9dc;
+
+  --color-sky-400: #4fc3f7;
+  --color-sky-500: #1cb0f6;
+  --color-sky-600: #1899d6;
+  --color-sky-100: #ddf4ff;
+
+  --color-amber-400: #ffd43b;
+  --color-amber-500: #ffc800;
+  --color-amber-600: #e5a500;
+  --color-amber-100: #fff4d1;
+
+  --color-coral-500: #ff4b4b;
+  --color-coral-600: #ea2b2b;
+  --color-coral-100: #ffe5e5;
+
+  /* The pigeon herself, and anything that should read as "bird". */
+  --color-slate-400: #b6c0d4;
+  --color-slate-500: #8494b0;
+  --color-slate-600: #5b6b8c;
+
+  /* --- surfaces and text ------------------------------------------------- */
+  --color-paper: #ffffff;
+  --color-cream: #fff9f0;
+  --color-mist: #f7f7f7;
+  --color-line: #e5e5e5;
+  --color-line-strong: #d4d4d4;
+
+  --color-ink: #3c3c3c;
+  --color-ink-soft: #4b4b4b;
+  --color-ink-faint: #afafaf;
+
+  --font-display: var(--font-nunito), ui-rounded, 'Segoe UI Rounded', system-ui, sans-serif;
+  --font-letter: 'Iowan Old Style', 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
+
+  /* Depth is one value everywhere: the lip under a pressable thing. */
+  --lip: 4px;
+
+  --ease-pop: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  /* Tap targets and type are sized for a thumb, not a mouse. */
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-weight: 700;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: none;
+  min-height: 100dvh;
+}
+
+/* Mobile first, and mobile mostly. */
+.shell {
+  margin-inline: auto;
+  width: 100%;
+  max-width: 30rem;
+  padding-inline: 1rem;
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+}
+
+/*
+ * Component classes live in a layer so Tailwind utilities can still override
+ * them. Outside a layer they would win on cascade order, which silently killed
+ * every tinted panel in the app: `bg-amber-100` lost to `.panel`'s background
+ * and the tone prop did nothing at all.
+ */
+@layer components {
+  /*
+   * The pressable. A solid face sitting on a darker lip, which compresses when
+   * pushed — the whole shape language of the app in one rule.
+   */
+  .press {
+    position: relative;
+    border-radius: 1rem;
+    border: none;
+    font-weight: 800;
+    letter-spacing: 0.01em;
+    transition:
+      transform 0.06s ease-out,
+      box-shadow 0.06s ease-out,
+      filter 0.15s ease-out;
+    will-change: transform;
+  }
+
+  .press:not(:disabled):active {
+    transform: translateY(var(--lip));
+    box-shadow: none !important;
+  }
+
+  .press:disabled {
+    filter: saturate(0.15) opacity(0.55);
+    box-shadow: 0 var(--lip) 0 var(--color-line-strong) !important;
+  }
+
+  /* A card that sits on the page rather than floating above it. */
+  .panel {
+    background: var(--color-paper);
+    border: 2px solid var(--color-line);
+    border-radius: 1.25rem;
+  }
+}
+
+/* Airmail edging, for anything that is literally a letter. */
+.airmail {
+  background-image: repeating-linear-gradient(
+    45deg,
+    var(--color-coral-500) 0 10px,
+    transparent 10px 20px,
+    var(--color-sky-500) 20px 30px,
+    transparent 30px 40px
+  );
+}
+
+.letter-face {
+  font-family: var(--font-letter);
+  font-weight: 400;
+  font-size: 1.0625rem;
+  line-height: 1.8;
+  color: var(--color-ink);
+}
+
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-7px) rotate(2deg);
+  }
+}
+
+@keyframes pop-in {
+  0% {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.bob {
+  animation: bob 3s var(--ease-pop) infinite;
+}
+
+.pop-in {
+  animation: pop-in 0.4s var(--ease-pop) both;
+}
+
+.pulse-soft {
+  animation: pulse-soft 1.8s ease-in-out infinite;
+}
+
+/* --- landing page ------------------------------------------------------- */
+
+/*
+ * Every one of these animates transform or opacity only, so the compositor
+ * handles them and the main thread stays free. A landing page full of motion
+ * is exactly where a phone starts dropping frames, and none of this touches
+ * layout.
+ */
+
+@keyframes float-soft {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes glide {
+  0% {
+    transform: translate(-28px, 10px) rotate(-6deg);
+  }
+  50% {
+    transform: translate(0, -6px) rotate(2deg);
+  }
+  100% {
+    transform: translate(28px, 10px) rotate(6deg);
+  }
+}
+
+@keyframes jitter {
+  0%,
+  92%,
+  100% {
+    transform: translateX(0);
+  }
+  94% {
+    transform: translateX(-2px);
+  }
+  96% {
+    transform: translateX(2px);
+  }
+  98% {
+    transform: translateX(-1px);
+  }
+}
+
+@keyframes ping-out {
+  0% {
+    transform: scale(0.7);
+    opacity: 0.7;
+  }
+  70%,
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+@keyframes twinkle {
+  0%,
+  100% {
+    transform: scale(0.7);
+    opacity: 0.35;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
+
+@keyframes draw-line {
+  from {
+    stroke-dashoffset: 320;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes breathe-soft {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.03);
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.float {
+  animation: float-soft 4.5s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.glide {
+  animation: glide 7s ease-in-out infinite alternate;
+  transform-origin: center;
+}
+
+.jitter {
+  animation: jitter 3.5s linear infinite;
+}
+
+.ping {
+  animation: ping-out 2.6s ease-out infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+.twinkle {
+  animation: twinkle 3s ease-in-out infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+.draw {
+  stroke-dasharray: 6 7;
+  animation: draw-line 12s linear infinite;
+}
+
+.breathe-soft {
+  animation: breathe-soft 4s ease-in-out infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+/*
+ * Sections rise as they come into view, observed rather than watched on scroll
+ * so nothing runs during the scroll itself.
+ *
+ * Note which way round this is: `.reveal` is visible by default, and only
+ * hidden once the script has confirmed an observer is actually watching it.
+ * Hiding by default would mean that any failure of the observer — no
+ * JavaScript, a browser without IntersectionObserver, a tab that never gets a
+ * rendering opportunity — leaves the entire page invisible. For the page whose
+ * job is to explain the product to somebody who has never seen it, content
+ * must never depend on an animation having run.
+ */
+.reveal-ready .reveal:not(.shown) {
+  opacity: 0;
+}
+
+.reveal-ready .reveal.shown {
+  /*
+   * Opacity is declared, not inherited from the animation's fill.
+   *
+   * With `animation: rise ... both`, the element sits on the `from` keyframe
+   * until the animation actually runs — so anywhere animations do not run, a
+   * revealed section stays at opacity 0 for ever. Declaring the end state and
+   * letting the animation merely decorate the way there means the worst case
+   * is content appearing without motion, rather than not appearing at all.
+   */
+  opacity: 1;
+  animation: rise 0.65s var(--ease-pop);
+}
+
+::selection {
+  background: var(--color-amber-400);
+  color: var(--color-ink);
+}
+
+*:focus-visible {
+  outline: 3px solid var(--color-sky-500);
+  outline-offset: 3px;
+  border-radius: 0.75rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

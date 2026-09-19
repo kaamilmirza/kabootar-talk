@@ -39,3 +39,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+.vercel
+.env*
+
+# agent tooling (vendored skill docs, restorable from skills-lock.json)
+/.agents
+/.claude
+
+# the example is safe to share — the real one above is not
+!.env.example
