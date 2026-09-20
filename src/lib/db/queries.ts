@@ -904,8 +904,11 @@ export async function requestReseal(letterId: string, userId: string): Promise<b
  * went missing. `opened_at` is cleared so the letter can be collected again,
  * and the request is cleared with it.
  *
- * The timing columns are matched in the predicate rather than written, so a
- * caller cannot use a repair to move a letter through time.
+ * The journey cannot move, because the columns that describe it are simply
+ * not in the SET clause. That is a stronger guarantee than matching them in
+ * the predicate would be, and it does not depend on a timestamp surviving a
+ * round trip through JavaScript unchanged — which, at microsecond precision,
+ * it does not always do.
  */
 export async function resealLetter(input: {
   letterId: string;
@@ -913,8 +916,6 @@ export async function resealLetter(input: {
   header: unknown;
   manifest: string;
   body: string;
-  departedAt: Date;
-  arrivesAt: Date;
 }): Promise<boolean> {
   const rows = await sql<{ id: string }>`
     update letters set
@@ -925,8 +926,6 @@ export async function resealLetter(input: {
       reseal_requested_at = null
     where id = ${input.letterId}
       and sender_id = ${input.senderId}
-      and departed_at = ${input.departedAt}
-      and arrives_at = ${input.arrivesAt}
     returning id
   `;
   return rows.length === 1;

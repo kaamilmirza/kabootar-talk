@@ -17,8 +17,9 @@ type Context = { params: Promise<{ id: string }> };
  * time and put back in the same row.
  *
  * This is a repair, not a resend. The bird already made the journey, so the
- * departure, the arrival and the carrier all stay exactly as they were, and
- * the database enforces that rather than trusting what arrives here.
+ * departure, the arrival and the carrier all stay exactly as they were: the
+ * header is checked against the stored row here, and the columns themselves
+ * are never written, so neither layer has to trust the other.
  */
 const schema = z.object({
   header: sendLetterSchema.shape.header,
@@ -58,8 +59,6 @@ export const POST = route(async (request: Request, { params }: Context) => {
     header: input.header,
     manifest: input.manifest,
     body: input.body,
-    departedAt: existing.departed_at,
-    arrivesAt: existing.arrives_at,
   });
 
   if (!ok) throw notFound('No such letter.');
