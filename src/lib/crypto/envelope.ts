@@ -24,7 +24,7 @@ const INFO_MANIFEST = 'letter/manifest/v1';
 const INFO_BODY = 'letter/body/v1';
 
 /** Longest letter we accept, in characters. Long enough for a real letter. */
-export const MAX_LETTER_CHARS = 8000;
+export const MAX_LETTER_CHARS = 20_000;
 
 export interface Place {
   lat: number;

@@ -34,7 +34,7 @@ const schema = await readFile(schemaPath, 'utf8');
 const reset = process.argv.includes('--reset');
 
 const DROP = `
-  drop table if exists world_beacons, rate_limits, letters, pigeons, nests,
+  drop table if exists archive_entries, world_beacons, rate_limits, letters, pigeons, nests,
     invites, sessions, auth_challenges, one_time_prekeys, signed_prekeys, users cascade;
 `;
 

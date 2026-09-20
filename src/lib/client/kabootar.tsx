@@ -47,7 +47,13 @@ import { distanceKm } from '../flight/geo';
 import { effectiveSpeed, flightCost, type Mood } from '../pigeon/life';
 
 import { ApiError, del, get, now, post } from './api';
-import { archiveLetter, readArchive, type ArchivedLetter } from './archive';
+import {
+  archiveLetter,
+  keepLetter,
+  readArchive,
+  syncArchive,
+  type ArchivedLetter,
+} from './archive';
 import {
   burnOneTimePreKey,
   generateInitialPreKeys,
@@ -284,6 +290,31 @@ export function KabootarProvider({ children }: { children: ReactNode }) {
       const rotated = await rotateSignedPreKey(id, profile.signedPreKey.id + 1);
       await post('/api/keys', { signedPreKey: rotated });
     }
+
+    /*
+     * Reconcile the kept letters with the server, both ways.
+     *
+     * Pull is what makes a device you just restored whole: the history is
+     * sealed under a key derived from your phrase, so it decrypts here
+     * without anything having been transferred between devices. Push carries
+     * up anything this device kept while offline, or before there was
+     * anywhere durable to put it.
+     *
+     * Deliberately not awaited: a slow or failed sync must never hold up the
+     * screen, and the local copy is already correct.
+     */
+    void syncArchive(id).catch(() => {});
+
+    /*
+     * Ask the browser to treat this origin's storage as durable.
+     *
+     * Without it the local archive is evictable under storage pressure, and
+     * iOS clears it outright after weeks of not opening the app. The server
+     * copy means eviction is no longer fatal, but losing the fast local copy
+     * for no reason is still worth avoiding. Best effort: browsers may
+     * decline, and nothing here depends on the answer.
+     */
+    void navigator.storage?.persist?.().catch(() => {});
   }, []);
 
   const activate = useCallback(
@@ -498,16 +529,19 @@ export function KabootarProvider({ children }: { children: ReactNode }) {
 
       // Your own copy. The server's copy becomes unreadable to you the moment
       // your partner opens it and burns the prekey, which is the point.
-      await archiveLetter(id, {
+      const kept = {
         letterId: result.id,
         nestId,
-        direction: 'sent',
+        direction: 'sent' as const,
         text: trimmed,
         writtenAt: departedAt,
         departedAt,
         arrivesAt,
         manifest,
-      });
+      };
+
+      await archiveLetter(id, kept);
+      void keepLetter(id, kept);
 
       await rememberPlaces(id, nestId, { from, to });
       await refresh();
@@ -674,19 +708,32 @@ async function decryptIncoming(
 
     const body = openBody(opener, raw.body);
 
-    await archiveLetter(identity, {
+    const kept = {
       letterId: raw.id,
       nestId: raw.header.nestId,
-      direction: 'received',
+      direction: 'received' as const,
       text: body.text,
       writtenAt: body.writtenAt,
       departedAt: raw.departedAt,
       arrivesAt: raw.arrivesAt,
       manifest,
-    });
+    };
 
-    // Now that it is safely archived locally, destroy the key that opened it.
-    if (raw.header.session.oneTimePreKeyId !== null) {
+    await archiveLetter(identity, kept);
+
+    /*
+     * The key that opened this letter is destroyed only once the kept copy
+     * is somewhere durable.
+     *
+     * Burning it is irreversible: afterwards the letter cannot be opened
+     * again from the server's copy by anyone, so a burn following a failed
+     * upload would leave the only readable copy on this one device, which is
+     * the situation the archive exists to end. If the upload does not land,
+     * the prekey survives and the letter simply opens again next time.
+     */
+    const durable = await keepLetter(identity, kept);
+
+    if (durable && raw.header.session.oneTimePreKeyId !== null) {
       await burnOneTimePreKey(identity, raw.header.session.oneTimePreKeyId);
     }
 

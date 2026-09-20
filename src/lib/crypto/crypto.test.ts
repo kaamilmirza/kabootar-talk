@@ -19,6 +19,7 @@ import {
   type PreKeyBundle,
 } from './x3dh';
 import {
+  MAX_LETTER_CHARS,
   openBody,
   openManifest,
   sealLetter,
@@ -320,7 +321,7 @@ describe('letters', () => {
           mode: 'normal',
         },
         manifest,
-        body: { text: 'x'.repeat(9000), writtenAt: 0 },
+        body: { text: 'x'.repeat(MAX_LETTER_CHARS + 1), writtenAt: 0 },
       }),
     ).toThrow(/at most/i);
   });

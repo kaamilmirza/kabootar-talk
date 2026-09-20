@@ -14,6 +14,11 @@
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
+import {
+  openArchiveEntry,
+  sealArchiveEntry,
+  type ArchivedLetter,
+} from '../crypto/archive';
 import { openBody, openManifest, sealLetter, type EnvelopeHeader } from '../crypto/envelope';
 import { generateInviteCode, hashInviteCode } from '../crypto/invite';
 import {
@@ -48,10 +53,15 @@ class Device {
   signedPreKey!: { record: PreKeyRecord; signature: string };
   oneTimePreKeys: PreKeyRecord[] = [];
 
-  constructor(readonly identity: Identity) {}
+  constructor(
+    readonly identity: Identity,
+    /** Kept so a test can restore the same account on a second device. */
+    readonly phrase = '',
+  ) {}
 
   static create(): Device {
-    return new Device(identityFromPhrase(generateRecoveryPhrase()));
+    const phrase = generateRecoveryPhrase();
+    return new Device(identityFromPhrase(phrase), phrase);
   }
 
   async call<T>(path: string, init?: RequestInit): Promise<{ status: number; body: T }> {
@@ -674,5 +684,97 @@ describeE2E('the whole journey', { timeout: 60_000 }, () => {
 
     const { body } = await returning.call<{ userId: string }>('/api/me');
     expect(body.userId).toBe(alice.identity.id);
+  });
+
+  /*
+   * The reason the archive exists: a letter you have read should still be
+   * yours on a device that did not read it, and after this one is wiped.
+   */
+  describe('the letters you keep', () => {
+    const keptId = '44444444-4444-4444-8444-444444444444';
+
+    const kept: ArchivedLetter = {
+      letterId: keptId,
+      nestId: '55555555-5555-4555-8555-555555555555',
+      direction: 'received',
+      text: 'Keep this one. It should outlive the browser it was read in.',
+      writtenAt: 1_700_000_000_000,
+      departedAt: 1_700_000_100_000,
+      arrivesAt: 1_700_086_500_000,
+      manifest: { from: TORONTO, to: HYDERABAD, mode: 'normal' },
+    };
+
+    it('keeps one, sealed with something the server has no key for', async () => {
+      const blob = sealArchiveEntry(alice.identity, kept);
+
+      const { status, body } = await alice.post<{ kept: number }>('/api/archive', {
+        entries: [{ letterId: keptId, blob }],
+      });
+
+      expect(status, JSON.stringify(body)).toBe(200);
+      expect(body.kept).toBeGreaterThanOrEqual(1);
+    });
+
+    it('gives it back to a device that has never seen it', async () => {
+      // A laptop: the same twelve words, a fresh session, no local storage
+      // and no contact of any kind with the device that read the letter.
+      const laptop = new Device(identityFromPhrase(alice.phrase));
+      await laptop.signIn();
+
+      const { body } = await laptop.call<{
+        entries: { letterId: string; blob: string }[];
+      }>('/api/archive');
+
+      const entry = body.entries.find((e) => e.letterId === keptId);
+      expect(entry, 'the laptop should be offered the letter').toBeDefined();
+
+      const opened = openArchiveEntry(laptop.identity, keptId, entry!.blob);
+      expect(opened).not.toBeNull();
+      expect(opened!.text).toBe(kept.text);
+      expect(opened!.manifest.to.label).toBe('Hyderabad');
+    });
+
+    it('does not offer it to anybody else', async () => {
+      const { body } = await bob.call<{ entries: { letterId: string }[] }>('/api/archive');
+      expect(body.entries.some((e) => e.letterId === keptId)).toBe(false);
+    });
+
+    it('is unreadable even to somebody who steals the blob', async () => {
+      const { body } = await alice.call<{
+        entries: { letterId: string; blob: string }[];
+      }>('/api/archive');
+
+      const stolen = body.entries.find((e) => e.letterId === keptId)!.blob;
+      expect(openArchiveEntry(bob.identity, keptId, stolen)).toBeNull();
+    });
+
+    it('replaces a letter rather than duplicating it', async () => {
+      const before = await alice.call<{ entries: unknown[] }>('/api/archive');
+
+      await alice.post('/api/archive', {
+        entries: [{ letterId: keptId, blob: sealArchiveEntry(alice.identity, kept) }],
+      });
+
+      const after = await alice.call<{ entries: unknown[] }>('/api/archive');
+      expect(after.body.entries.length).toBe(before.body.entries.length);
+    });
+
+    it('will not keep letters for a stranger', async () => {
+      const nobody = new Device(identityFromPhrase(generateRecoveryPhrase()));
+
+      const { status } = await nobody.post('/api/archive', {
+        entries: [{ letterId: keptId, blob: sealArchiveEntry(nobody.identity, kept) }],
+      });
+
+      expect(status).toBe(401);
+    });
+
+    it('refuses a blob too large to be a letter', async () => {
+      const { status } = await alice.post('/api/archive', {
+        entries: [{ letterId: keptId, blob: 'A'.repeat(400_000) }],
+      });
+
+      expect(status).toBe(400);
+    });
   });
 });

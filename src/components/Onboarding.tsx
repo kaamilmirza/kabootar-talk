@@ -24,7 +24,13 @@ import {
   Title,
 } from '@/components/ui/primitives';
 import { useKabootar } from '@/lib/client/kabootar';
-import { isValidRecoveryPhrase, normalizePhrase } from '@/lib/crypto/identity';
+import {
+  isValidRecoveryPhrase,
+  normalizePhrase,
+  phraseWords,
+  unknownPhraseWords,
+  PHRASE_LENGTH,
+} from '@/lib/crypto/identity';
 import {
   PIN_LENGTH,
   PrfUnsupportedError,
@@ -214,35 +220,76 @@ export function Onboarding({ start = 'welcome' }: { start?: 'welcome' | 'phrase'
   }
 
   if (step === 'restore') {
+    const words = phraseWords(phrase);
+    const unknown = unknownPhraseWords(phrase);
     const valid = isValidRecoveryPhrase(phrase);
+    const full = words.length === PHRASE_LENGTH;
 
     return (
       <Screen>
-        <Title sub="Your nests come back. Letters you had already opened stayed on your old device — that is the cost of them being unreadable to everyone else.">
-          Restore your coop
+        <Title sub="Type the twelve words you were given when you started. They rebuild your keys on this device, and your letters come back with them.">
+          Sign in with your phrase
         </Title>
 
         <Panel>
-          <Label>Your twelve words</Label>
+          <div className="mb-2 flex items-baseline justify-between gap-3">
+            <Label>Your twelve words</Label>
+            <span
+              className={`text-[0.8rem] font-extrabold tabular-nums ${
+                full ? 'text-grass-600' : 'text-ink-faint'
+              }`}
+            >
+              {words.length} / {PHRASE_LENGTH}
+            </span>
+          </div>
+
           <TextArea
             value={phrase}
             onChange={(e) => setPhrase(e.target.value)}
+            onBlur={() => setPhrase(normalizePhrase(phrase))}
             rows={4}
             autoCapitalize="none"
             autoCorrect="off"
+            autoComplete="off"
             spellCheck={false}
             placeholder="twelve words, separated by spaces"
           />
-          {phrase && !valid ? (
-            <p className="mt-3 text-[0.9rem] font-bold text-coral-600">
-              That is not a valid recovery phrase — check for typos.
+
+          <p className="mt-3 text-[0.85rem] leading-relaxed font-semibold text-ink-faint">
+            Order matters. Capitals and extra spaces do not — paste them in if
+            you have them saved somewhere.
+          </p>
+
+          {/*
+            Three different failures, told apart, because "that is not valid"
+            sends somebody to re-read all twelve words when usually one of them
+            is simply misspelt.
+          */}
+          {unknown.length > 0 ? (
+            <p className="mt-3 text-[0.9rem] leading-relaxed font-bold text-coral-600">
+              {unknown.length === 1 ? 'This word is not' : 'These words are not'} on
+              the list: {unknown.join(', ')}
+            </p>
+          ) : full && !valid ? (
+            <p className="mt-3 text-[0.9rem] leading-relaxed font-bold text-coral-600">
+              All twelve words are real, but they do not check out together.
+              One is likely in the wrong place.
+            </p>
+          ) : words.length > PHRASE_LENGTH ? (
+            <p className="mt-3 text-[0.9rem] leading-relaxed font-bold text-coral-600">
+              That is {words.length} words. There should be exactly twelve.
             </p>
           ) : null}
         </Panel>
 
+        <Notice tone="sky">
+          Nobody can give these back to you, and nobody can look them up. If
+          they are gone, the letters are gone with them.
+        </Notice>
+
         <div className="mt-6 flex flex-col gap-2">
           <Button full disabled={!valid} onClick={() => setStep('lock')}>
-            Continue
+            {valid ? 'Continue' : 'Enter all twelve words'}
           </Button>
           <TextButton onClick={() => setStep('welcome')}>Back</TextButton>
         </div>

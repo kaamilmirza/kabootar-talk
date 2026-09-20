@@ -205,8 +205,8 @@ function LetterCard({ letter }: { letter: Letter }) {
     return (
       <Panel>
         <p className="text-[0.95rem] leading-relaxed font-semibold text-ink-faint">
-          This letter was opened on another device. Its key was destroyed when
-          it was read, so it cannot be opened again here.
+          This letter was read on another device and is still syncing across.
+          It will appear here shortly; pull down to refresh if it does not.
         </p>
       </Panel>
     );
@@ -267,7 +267,7 @@ function LetterCard({ letter }: { letter: Letter }) {
           <p className="letter-face whitespace-pre-wrap">{letter.text}</p>
         ) : (
           <p className="text-[0.95rem] font-semibold text-ink-faint">
-            This one landed, but its text is not on this device.
+            Fetching this one from your other devices…
           </p>
         )}
 

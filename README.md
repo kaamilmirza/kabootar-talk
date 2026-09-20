@@ -52,9 +52,11 @@ anything. It does not contain a single letter, name, or location.
   The signed prekey is replaced weekly, which bounds how much a single
   compromised secret could ever expose; the previous one is kept so letters
   already in the air still open when they land.
-- **Forward secrecy** is real: each letter uses a one-time prekey that is
-  destroyed after the letter is opened. Someone who seizes both phones and the
-  database tomorrow cannot read yesterday's letters.
+- **Forward secrecy in transit** is real: each letter uses a one-time prekey
+  that is destroyed after the letter is opened, so the copy the server carried
+  can never be opened again by anyone, including you. Letters you choose to
+  keep are re-sealed under a key derived from your phrase (see the archive,
+  below), which is a deliberate trade and the one place this weakens.
 - **Encryption** is XChaCha20-Poly1305. Every letter is sealed twice: a
   *manifest* (the route) released immediately so you can watch the pigeon, and
   a *body* the server refuses to hand over before the arrival time.
@@ -86,16 +88,22 @@ most valuable thing a user of this app can do.
 - **Not audited.** It is a careful implementation of well-understood
   primitives by someone who read the specs, not a reviewed cryptosystem. Judge
   it accordingly.
-- **No message history transfer.** Letters live on the device that opened them.
-  Restoring from your phrase on a new phone gets your identity and your nests
-  back, not your old letters. That is the direct cost of forward secrecy.
+- **The archive is only as secret as your phrase.** A letter you have read is
+  re-sealed under a key derived from your twelve words and mirrored to the
+  server, so it survives a cleared browser and follows you to a new device
+  without anything being transferred between them. The server still cannot
+  read a byte of it. But somebody holding your phrase *and* a database dump
+  could read your history, which the transport alone would not have allowed.
+  Durability was worth more here than that guarantee.
 - **Metadata is not hidden.** The server sees which nests exist and when
   letters move. Hiding that needs mixnets, and this is a letter app for two
   people.
 - **No attachments.** Text only, which suits letters.
 - **Erasing is local.** "Use a different phrase" drops this device's whole
   store — the vault, the prekey secrets and the decrypted letters. It does not
-  reach the server, which still holds the ciphertext it never had a key for.
+  reach the server, which still holds your kept letters, sealed. Signing in
+  again with the same phrase brings them back; there is no way to delete them
+  from the server yet.
 - **Two numbers are trusted to the client.** The server never learns where
   either of you is, so it cannot check how long a flight should take or how
   much it should tire a bird. It enforces absolute bounds on both instead, and

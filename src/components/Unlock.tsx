@@ -162,9 +162,10 @@ export function Unlock() {
           {confirmingReset ? (
             <Panel tone="coral">
               <p className="mb-4 text-[0.95rem] leading-relaxed font-bold text-ink-soft">
-                This removes your identity from this device. You will need your
-                twelve words to get back in, and letters stored here will be
-                gone.
+                This removes your identity from this device. Your letters are
+                not lost — they come back when you sign in with your twelve
+                words, here or anywhere else. Without those words, nothing
+                comes back.
               </p>
               <div className="flex gap-2">
                 <Button tone="coral" className="flex-1" onClick={() => void forgetDevice()}>

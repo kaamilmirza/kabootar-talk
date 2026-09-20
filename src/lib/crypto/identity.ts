@@ -57,6 +57,26 @@ export function normalizePhrase(phrase: string): string {
   return phrase.trim().toLowerCase().split(/\s+/).join(' ');
 }
 
+/** The words so far, however sloppily they were typed or pasted. */
+export function phraseWords(phrase: string): string[] {
+  const trimmed = normalizePhrase(phrase);
+  return trimmed === '' ? [] : trimmed.split(' ');
+}
+
+export const PHRASE_LENGTH = 12;
+
+/**
+ * Which words are not in the BIP39 list at all.
+ *
+ * Worth singling out, because it is the one kind of mistake somebody can fix
+ * by looking: a phrase that fails its checksum gives no clue where the error
+ * is, but a misspelt word can be named.
+ */
+export function unknownPhraseWords(phrase: string): string[] {
+  const known = new Set(wordlist);
+  return phraseWords(phrase).filter((w) => !known.has(w));
+}
+
 /**
  * Twelve words in, a full identity out. Deterministic: the same phrase always
  * rebuilds exactly the same keys, which is what makes the phrase a backup.

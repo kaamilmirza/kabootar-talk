@@ -242,3 +242,35 @@ create table if not exists world_members (
   user_id    text        primary key references users(id) on delete cascade,
   joined_at  timestamptz not null default now()
 );
+
+-- Your own letters, kept where any of your devices can reach them.
+--
+-- The transport gives a letter per-letter forward secrecy: the one-time prekey
+-- that opened it is destroyed on read, and the copy in `letters` becomes
+-- permanently unreadable. That is the right guarantee for a message in flight,
+-- and the wrong one for a letter you want to keep, because it made the reading
+-- device the only place the words existed. Clearing a browser lost them.
+--
+-- So an opened letter is re-sealed under a key derived from the owner's
+-- recovery phrase and stored here. Every device restored from those twelve
+-- words derives the identical key, which is what makes the history portable
+-- without the server ever holding one.
+--
+-- What a leak exposes: an opaque account id, a letter id, and a blob this
+-- database has no key for. Reading it needs the phrase as well, which is the
+-- trade this table makes deliberately — durability in exchange for the older
+-- promise that a seized database could never be opened even with the phrase.
+--
+-- No foreign key to letters(id) on purpose: this copy must outlive anything
+-- that might remove the row it came from.
+create table if not exists archive_entries (
+  user_id     text        not null references users(id) on delete cascade,
+  letter_id   uuid        not null,
+  blob        text        not null,
+  updated_at  timestamptz not null default now(),
+
+  primary key (user_id, letter_id)
+);
+
+create index if not exists archive_entries_owner
+  on archive_entries (user_id, updated_at desc);

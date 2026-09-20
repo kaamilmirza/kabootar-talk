@@ -842,3 +842,55 @@ export function listBeacons(minimum: number, limit = 200) {
     limit ${limit}
   `;
 }
+
+// --- the archive ------------------------------------------------------------
+
+export interface ArchiveEntryRow extends Row {
+  letter_id: string;
+  blob: string;
+  updated_at: Date;
+}
+
+/**
+ * Every letter this account has kept, as ciphertext.
+ *
+ * Nothing here is readable without the owner's recovery phrase, so there is no
+ * filtering to do beyond the account itself.
+ */
+export function listArchiveEntries(userId: string) {
+  return sql<ArchiveEntryRow>`
+    select letter_id, blob, updated_at
+    from archive_entries
+    where user_id = ${userId}
+    order by updated_at desc
+  `;
+}
+
+/**
+ * Keep a letter, or replace the copy already kept.
+ *
+ * Last write wins, which is right for a blob whose plaintext only its owner
+ * can produce: two devices re-sealing the same letter write equivalent
+ * content, so there is nothing to reconcile.
+ */
+export async function putArchiveEntries(
+  userId: string,
+  entries: readonly { letterId: string; blob: string }[],
+): Promise<void> {
+  for (const entry of entries) {
+    await sql`
+      insert into archive_entries (user_id, letter_id, blob, updated_at)
+      values (${userId}, ${entry.letterId}, ${entry.blob}, now())
+      on conflict (user_id, letter_id)
+      do update set blob = excluded.blob, updated_at = now()
+    `;
+  }
+}
+
+/** How many letters this account is keeping. */
+export async function countArchiveEntries(userId: string): Promise<number> {
+  const row = await one<{ n: string }>(sql`
+    select count(*) as n from archive_entries where user_id = ${userId}
+  `);
+  return Number(row?.n ?? 0);
+}

@@ -103,5 +103,25 @@ export const sendLetterSchema = z.object({
   body: z.string().min(32).max(MAX_SEALED_BODY).regex(B64),
 });
 
+/**
+ * A kept letter, on its way to or from the archive.
+ *
+ * The blob is the whole ArchivedLetter re-sealed on the device: the text, when
+ * it was written, and the flight it made. The ceiling is the same worst-case
+ * arithmetic the body uses, plus room for the manifest travelling with it.
+ */
+const MAX_ARCHIVE_BLOB = Math.ceil(((MAX_LETTER_CHARS * 4 + 8192 + 64 + 24 + 16) / 3) * 4);
+
+export const archiveEntrySchema = z.object({
+  letterId: uuid,
+  blob: z.string().min(32).max(MAX_ARCHIVE_BLOB).regex(B64),
+});
+
+export const archivePutSchema = z.object({
+  entries: z.array(archiveEntrySchema).min(1).max(50),
+});
+
+export type ArchiveEntryInput = z.infer<typeof archiveEntrySchema>;
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type SendLetterInput = z.infer<typeof sendLetterSchema>;
