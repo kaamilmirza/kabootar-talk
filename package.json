@@ -11,7 +11,10 @@
     "test:watch": "vitest",
     "db:push": "node scripts/migrate.mjs",
     "typecheck": "tsc --noEmit",
-    "db:reset": "node scripts/migrate.mjs --reset"
+    "db:reset": "node scripts/migrate.mjs --reset",
+    "inflight": "node scripts/check-inflight.mjs",
+    "inflight:save": "node scripts/check-inflight.mjs --save",
+    "inflight:check": "node scripts/check-inflight.mjs --compare"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

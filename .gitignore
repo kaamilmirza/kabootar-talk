@@ -49,3 +49,7 @@ next-env.d.ts
 
 # the example is safe to share — the real one above is not
 !.env.example
+
+# the in-flight letter baseline: ids, sizes and arrival times of real letters.
+# operational state for scripts/check-inflight.mjs, not something to publish.
+.inflight-baseline.json
