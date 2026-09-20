@@ -161,7 +161,7 @@ describeE2E('the whole journey', { timeout: 60_000 }, () => {
   let sentAt = 0;
   let arrivesAt = 0;
 
-  const secret = 'Assalamu alaikum. I have been thinking about the roof in Hyderabad.';
+  const secret = 'The lake froze early this year. I have been thinking about the roof.';
 
   beforeAll(async () => {
     await alice.register();

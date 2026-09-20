@@ -12,10 +12,13 @@ import { SafetyWords } from '@/components/SafetyWords';
 import { Kabootar } from '@/components/ui/Kabootar';
 import { Button, Notice, Panel, Screen, TextButton } from '@/components/ui/primitives';
 import { useKabootar, type Nest } from '@/lib/client/kabootar';
+import { exportLetters } from '@/lib/client/archive';
 
 export function Coop() {
-  const { nests, refresh, confirmNest, lock } = useKabootar();
+  const { nests, refresh, confirmNest, lock, identity } = useKabootar();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState<number | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => void refresh(), 60_000);
@@ -133,7 +136,36 @@ export function Coop() {
         </Link>
       </div>
 
-      <footer className="mt-auto pt-10 text-center text-[0.8rem] leading-relaxed font-semibold text-ink-faint">
+      {/*
+        A copy that depends on nobody.
+        Everything else here is a promise somebody has to keep: that the server
+        stays up, that the database survives, that this app keeps working. A
+        file on your own disk is the only copy that needs none of that.
+      */}
+      <div className="mt-auto pt-10">
+        <TextButton
+          onClick={async () => {
+            if (!identity) return;
+            setSaving(true);
+            try {
+              const { count } = await exportLetters(identity);
+              setSaved(count);
+            } finally {
+              setSaving(false);
+            }
+          }}
+          disabled={saving}
+        >
+          {saving ? 'Gathering…' : 'Save my letters to this device'}
+        </TextButton>
+        {saved !== null ? (
+          <p className="mt-1 text-center text-[0.8rem] font-bold text-grass-600">
+            {saved} letter{saved === 1 ? '' : 's'} saved. Keep it somewhere safe.
+          </p>
+        ) : null}
+      </div>
+
+      <footer className="pt-6 text-center text-[0.8rem] leading-relaxed font-semibold text-ink-faint">
         End-to-end encrypted. The server stores ciphertext and a delivery time,
         and nothing else.
         <Link href="/about" className="mt-2 block text-sky-500 underline underline-offset-2">

@@ -147,6 +147,91 @@ export async function syncArchive(identity: Identity): Promise<{ pulled: number;
   return { pulled, pushed };
 }
 
+// --- taking them with you ---------------------------------------------------
+
+function whenReadable(ms: number): string {
+  const d = new Date(ms);
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}, ${hh}:${mm}`;
+}
+
+/**
+ * Every letter you have, as plain text you can keep anywhere.
+ *
+ * The point of this app is that these are worth keeping, and everything else
+ * here is a promise that somebody else has to honour: that the server stays
+ * up, that the database is not lost, that this code keeps working. A file on
+ * your own disk is the only copy that depends on none of those. It is also
+ * the only format still readable in twenty years.
+ *
+ * Deliberately not encrypted. It is a letter, in a file, on a machine you
+ * already trust with the app that decrypts it.
+ */
+export function letterFile(letters: ArchivedLetter[], selfName = 'you'): string {
+  const ordered = [...letters].sort((a, b) => a.departedAt - b.departedAt);
+
+  const lines: string[] = [
+    'KABOOTAR TALK',
+    `${ordered.length} letter${ordered.length === 1 ? '' : 's'}, exported ${whenReadable(Date.now())}`,
+    '',
+    'Every letter you have sent or received, in the order they were written.',
+    '',
+  ];
+
+  for (const letter of ordered) {
+    const from = letter.direction === 'sent' ? selfName : letter.manifest.from.label;
+    const to = letter.direction === 'sent' ? letter.manifest.to.label : selfName;
+
+    lines.push(
+      '='.repeat(60),
+      letter.direction === 'sent' ? `From ${from}, to ${to}` : `To ${to}, from ${from}`,
+      `Written  ${whenReadable(letter.writtenAt)}`,
+      `Landed   ${whenReadable(letter.arrivesAt)}`,
+      `Carried  ${letter.manifest.from.label} to ${letter.manifest.to.label}`,
+      '',
+      letter.text,
+      '',
+    );
+  }
+
+  lines.push('='.repeat(60), '', 'Kept by kabootar talk. Nothing here needed the internet to read.');
+  return lines.join('\n');
+}
+
+/**
+ * Pull everything down, then hand it over as a file.
+ *
+ * The sync first is deliberate: a device that has been quiet might be missing
+ * letters the other one kept, and an export that silently omitted half the
+ * correspondence would be worse than none.
+ */
+export async function exportLetters(identity: Identity): Promise<{ count: number }> {
+  await syncArchive(identity).catch(() => ({ pulled: 0, pushed: 0 }));
+
+  const letters = await readArchive(identity);
+  const text = letterFile(letters);
+
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `kabootar-letters-${new Date().toISOString().slice(0, 10)}.txt`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  // Give the browser a moment to start the download before the blob is freed.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+
+  return { count: letters.length };
+}
+
 // --- reading ----------------------------------------------------------------
 
 export async function readArchive(identity: Identity, nestId?: string): Promise<ArchivedLetter[]> {

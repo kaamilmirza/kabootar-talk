@@ -49,6 +49,7 @@ import { effectiveSpeed, flightCost, type Mood } from '../pigeon/life';
 import { ApiError, del, get, now, post } from './api';
 import {
   archiveLetter,
+  archivedLetter,
   keepLetter,
   readArchive,
   syncArchive,
@@ -795,8 +796,33 @@ async function decryptIncoming(
    * is needed, and the request is harmless if the archive gets there first.
    */
   if (!secrets) {
-    // Asked once. The flag comes back on the letter, so a list that refreshes
-    // every few seconds does not keep asking for the same repair.
+    /*
+     * Look before asking for help.
+     *
+     * A burned prekey and a lost prekey are indistinguishable from here. The
+     * first means this letter was read somewhere and the words are already
+     * kept; the second means they were never opened at all. Only the second
+     * needs the sender to do anything, and asking when the answer is sitting
+     * in the archive costs a prekey, rewrites the letter, and throws away the
+     * fact that it had been read.
+     *
+     * So sync once and look. The local copy may simply not have arrived yet.
+     */
+    await syncArchive(identity).catch(() => ({ pulled: 0, pushed: 0 }));
+    const kept = await archivedLetter(identity, raw.id);
+
+    if (kept) {
+      return {
+        ...base,
+        manifest: kept.manifest,
+        text: kept.text,
+        writtenAt: kept.writtenAt,
+        status: 'landed',
+      };
+    }
+
+    // Genuinely gone from here. Asked once: the flag comes back on the letter,
+    // so a list that refreshes every few seconds does not keep asking.
     if (!raw.resealRequested) {
       void post(`/api/letters/${raw.id}/reseal-request`).catch(() => {});
     }

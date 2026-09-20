@@ -68,7 +68,8 @@ vi.mock('./api', () => ({
   }),
 }));
 
-const { archiveLetter, keepLetter, readArchive, syncArchive } = await import('./archive');
+const { archiveLetter, keepLetter, letterFile, readArchive, syncArchive } =
+  await import('./archive');
 
 // --- fixtures ----------------------------------------------------------------
 
@@ -209,5 +210,43 @@ describe('syncing with the server', () => {
     expect(pulled).toBe(2);
     const back = await readArchive(identity, NEST);
     expect(back.map((l) => l.text).sort()).toEqual(['first', 'second']);
+  });
+});
+
+describe('taking the letters with you', () => {
+  it('writes every letter, oldest first, with its words intact', () => {
+    const file = letterFile([
+      { ...letter(2, 'the second one'), direction: 'received' },
+      { ...letter(1, 'the first one'), direction: 'sent' },
+    ]);
+
+    expect(file).toContain('the first one');
+    expect(file).toContain('the second one');
+    expect(file.indexOf('the first one')).toBeLessThan(file.indexOf('the second one'));
+    expect(file).toContain('2 letters');
+  });
+
+  it('says which way each one went', () => {
+    const file = letterFile([{ ...letter(1), direction: 'sent' }]);
+    expect(file).toContain('Toronto to Hyderabad');
+    expect(file).toContain('Written');
+    expect(file).toContain('Landed');
+  });
+
+  it('keeps line breaks and scripts that are not English', () => {
+    const text = 'پہلی سطر\nدوسری سطر';
+    const file = letterFile([letter(1, text)]);
+    expect(file).toContain(text);
+  });
+
+  it('is readable on its own, with no keys or ciphertext in it', () => {
+    const file = letterFile([letter(1, 'plain words')]);
+    expect(file).not.toMatch(/[A-Za-z0-9_-]{60,}/);
+    expect(file).toContain('KABOOTAR TALK');
+  });
+
+  it('handles an empty archive without producing nonsense', () => {
+    const file = letterFile([]);
+    expect(file).toContain('0 letters');
   });
 });

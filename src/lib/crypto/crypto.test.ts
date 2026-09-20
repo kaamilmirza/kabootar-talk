@@ -212,7 +212,7 @@ describe('letters', () => {
     to: { lat: 17.385, lon: 78.4867, label: 'Hyderabad' },
     mode: 'normal',
   };
-  const body: LetterBody = { text: 'Assalamu alaikum. I have been thinking...', writtenAt: 1_700_000 };
+  const body: LetterBody = { text: 'The lake froze early. I have been thinking...', writtenAt: 1_700_000 };
 
   function sealed() {
     const { bundle, signedSecret, oneTimeSecret } = bobsBundle();
