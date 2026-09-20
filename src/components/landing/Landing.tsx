@@ -53,6 +53,7 @@ export function Landing({ onBegin, onRestore }: LandingProps) {
       <TheBird />
       <TheJourney />
       <WhatWeKnow />
+      <ReadTheCode />
       <Closing onBegin={onBegin} />
     </main>
   );
@@ -377,6 +378,107 @@ function WhatWeKnow() {
 }
 
 // --- closing -----------------------------------------------------------------
+
+/*
+ * The claims above, made checkable.
+ *
+ * Folded away because almost nobody wants it, and the few who do want the
+ * files rather than a description of them. `details` rather than state, so it
+ * works with JavaScript off like the rest of this page.
+ */
+const REPO = 'https://github.com/kaamilmirza/kabootar-talk';
+
+function ReadTheCode() {
+  return (
+    <section className="bg-mist py-14">
+      <div className="shell">
+        <details className="group">
+          <summary className="cursor-pointer list-none text-center text-[0.95rem] font-extrabold tracking-[0.06em] text-ink-faint uppercase hover:text-sky-500">
+            Read the code
+          </summary>
+
+          <div className="mt-8">
+            <p className="mb-7 text-[1rem] leading-relaxed font-semibold text-ink-soft">
+              Every claim on this page is checkable. Four files are worth your
+              time.
+            </p>
+
+            <Where
+              path="src/lib/db/schema.sql"
+              note="Every column the server has. If the database leaked, this file is the whole of what leaked."
+            />
+            <Where
+              path="src/lib/db/queries.ts"
+              note="Every database access in one file. Read it and you know exactly what the server can do."
+            />
+            <Where
+              path="src/lib/crypto/"
+              note="About 600 lines. Key agreement, the letter envelope, the archive."
+            />
+            <Where
+              path="next.config.ts"
+              note="The browser policy. connect-src 'self' means an injected script has nowhere to send anything."
+            />
+
+            <h3 className="mt-10 mb-4 text-[0.8rem] font-extrabold tracking-[0.1em] text-ink-faint uppercase">
+              Three things worth seeing
+            </h3>
+
+            <Snippet
+              code={'case when arrives_at <= now() then body else null end'}
+              note="The server cannot hand over a letter early, because the body is not selected until the arrival time. The gate is in SQL, not in the app."
+            />
+            <Snippet
+              code={'header    jsonb  not null\nmanifest  text   not null\nbody      text   not null'}
+              note="All three are ciphertext. There is no column for a name, an email, or a location, so there is none to leak."
+            />
+            <Snippet
+              code={"derive(identity.signing.secretKey, 'archive/v1')"}
+              note="The key your kept letters are sealed with, derived from your twelve words. Every device you own arrives at the same key without it ever being sent anywhere."
+            />
+
+            <p className="mt-8 text-[0.95rem] leading-relaxed font-semibold text-ink-soft">
+              It is not audited. It is a careful implementation of
+              well-understood primitives, and you can check that claim yourself.
+            </p>
+
+            <a
+              href={REPO}
+              className="mt-5 inline-block text-[1rem] font-extrabold text-sky-500 underline underline-offset-2"
+            >
+              github.com/kaamilmirza/kabootar-talk
+            </a>
+          </div>
+        </details>
+      </div>
+    </section>
+  );
+}
+
+function Where({ path, note }: { path: string; note: string }) {
+  return (
+    <div className="mb-5 border-l-2 border-line pl-4">
+      <a
+        href={`${REPO}/blob/main/${path}`}
+        className="block font-mono text-[0.9rem] font-bold break-all text-sky-600 underline underline-offset-2"
+      >
+        {path}
+      </a>
+      <p className="mt-1 text-[0.95rem] leading-relaxed font-semibold text-ink-soft">{note}</p>
+    </div>
+  );
+}
+
+function Snippet({ code, note }: { code: string; note: string }) {
+  return (
+    <div className="mb-6">
+      <pre className="overflow-x-auto rounded-xl border-2 border-line bg-ink px-4 py-3.5 font-mono text-[0.8rem] leading-relaxed text-paper">
+        <code>{code}</code>
+      </pre>
+      <p className="mt-2 text-[0.95rem] leading-relaxed font-semibold text-ink-soft">{note}</p>
+    </div>
+  );
+}
 
 function Closing({ onBegin }: { onBegin?: () => void }) {
   return (
