@@ -10,6 +10,13 @@ import { preKeysSchema, signedPreKeySchema } from '@/lib/server/validation';
 const schema = z.object({
   oneTimePreKeys: preKeysSchema.shape.oneTimePreKeys.optional(),
   signedPreKey: signedPreKeySchema.optional(),
+  /**
+   * Set by a device that has just been restored and holds none of the secrets
+   * for the keys already published. It clears the unclaimed pool before the
+   * new one goes in, because otherwise the server would keep handing out
+   * public keys nobody can open any more.
+   */
+  replaceOneTimePreKeys: z.boolean().optional(),
 });
 
 /**
@@ -47,6 +54,20 @@ export const POST = route(async (request: Request) => {
     if (!ok) throw badRequest('Signed prekey signature did not verify.');
 
     await db.upsertSignedPreKey({ userId, ...input.signedPreKey });
+  }
+
+  /*
+   * Order matters: clear first, then insert.
+   *
+   * Only the unclaimed keys go. A claimed one belongs to a letter already in
+   * the air, and `prekey_high_water` has its id recorded, so nothing here can
+   * cause an id to be issued twice.
+   */
+  if (input.replaceOneTimePreKeys) {
+    if (!input.signedPreKey) {
+      throw badRequest('Replacing the pool needs a new signed prekey with it.');
+    }
+    await db.deleteUnclaimedPreKeys(userId);
   }
 
   if (input.oneTimePreKeys) {

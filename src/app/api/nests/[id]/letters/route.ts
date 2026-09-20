@@ -50,6 +50,9 @@ export const GET = route(async (_request: Request, { params }: Context) => {
       departedAt: l.departed_at.getTime(),
       arrivesAt: l.arrives_at.getTime(),
       openedAt: l.opened_at?.getTime() ?? null,
+      // Set when the recipient could not open it and the sender should
+      // seal it again from their own copy.
+      resealRequested: l.reseal_requested_at !== null,
     })),
   });
 });

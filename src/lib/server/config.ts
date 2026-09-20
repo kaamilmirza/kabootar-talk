@@ -34,6 +34,17 @@ export const LIMITS = {
    * the signed prekey a long-term key.
    */
   signedPreKeyMaxAgeDays: 7,
+
+  /**
+   * The archive, bounded.
+   *
+   * A letter a day for fifty years is about eighteen thousand, so this is not
+   * a limit anybody writing letters will meet. It is here so a signed-in
+   * account cannot use the archive as free storage, which was the one place
+   * left where it could.
+   */
+  maxArchiveEntries: 50_000,
+  archiveWritesPerHour: 240,
 } as const;
 
 /**

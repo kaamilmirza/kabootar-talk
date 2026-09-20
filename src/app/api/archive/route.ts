@@ -1,5 +1,6 @@
 import * as db from '@/lib/db/queries';
-import { assertSameOrigin, json, parseBody, route } from '@/lib/server/http';
+import { LIMITS } from '@/lib/server/config';
+import { assertSameOrigin, json, parseBody, route, tooMany } from '@/lib/server/http';
 import { requireUserId } from '@/lib/server/session';
 import { archivePutSchema } from '@/lib/server/validation';
 
@@ -36,6 +37,20 @@ export const POST = route(async (request: Request) => {
   const userId = await requireUserId();
 
   const { entries } = await parseBody(request, archivePutSchema);
+
+  /*
+   * Two bounds, because this is the only endpoint that grows storage on
+   * demand. The rate limit stops a loop; the count stops a slow fill. Neither
+   * is reachable by anybody writing letters.
+   */
+  if (await db.isRateLimited(`archive:${userId}`, LIMITS.archiveWritesPerHour, 3600)) {
+    throw tooMany('Slow down.');
+  }
+
+  if ((await db.countArchiveEntries(userId)) + entries.length > LIMITS.maxArchiveEntries) {
+    throw tooMany('Your archive is full.');
+  }
+
   await db.putArchiveEntries(userId, entries);
 
   return json({ kept: await db.countArchiveEntries(userId) });

@@ -274,3 +274,21 @@ create table if not exists archive_entries (
 
 create index if not exists archive_entries_owner
   on archive_entries (user_id, updated_at desc);
+
+-- --- columns added after a table first shipped ------------------------------
+--
+-- `create table if not exists` silently does nothing when the table is already
+-- there, so a column added later never reaches a database that predates it.
+-- These alters are idempotent and run on every deploy, which is what makes a
+-- schema file safe to apply to an existing coop as well as a fresh one.
+
+alter table users
+  add column if not exists prekey_high_water integer not null default 0;
+
+-- Set by a recipient who cannot open a letter, because the device it was
+-- sealed for no longer holds the key — a cleared browser, a lost phone. The
+-- sender still has the words in their own archive, so the letter can be
+-- sealed again for the keys the recipient has now. It is a request for a
+-- repair, not a new letter: the pigeon has already made the trip.
+alter table letters
+  add column if not exists reseal_requested_at timestamptz;

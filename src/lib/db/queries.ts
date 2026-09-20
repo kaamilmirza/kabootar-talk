@@ -372,6 +372,7 @@ export interface LetterRow extends Row {
   departed_at: Date;
   arrives_at: Date;
   opened_at: Date | null;
+  reseal_requested_at: Date | null;
 }
 
 export function insertLetter(input: {
@@ -406,7 +407,7 @@ export function insertLetter(input: {
 export function listLetters(nestId: string, limit = 100) {
   return sql<LetterRow>`
     select id, nest_id, sender_id, pigeon_id, header, manifest, mode,
-           departed_at, arrives_at, opened_at,
+           departed_at, arrives_at, opened_at, reseal_requested_at,
            case when arrives_at <= now() then body else null end as body
     from letters
     where nest_id = ${nestId}
@@ -418,7 +419,7 @@ export function listLetters(nestId: string, limit = 100) {
 export function findDeliveredLetter(letterId: string, userId: string) {
   return one<LetterRow>(sql`
     select l.id, l.nest_id, l.sender_id, l.pigeon_id, l.header, l.manifest, l.body, l.mode,
-           l.departed_at, l.arrives_at, l.opened_at
+           l.departed_at, l.arrives_at, l.opened_at, l.reseal_requested_at
     from letters l
     join nests n on n.id = l.nest_id
     where l.id = ${letterId}
@@ -843,6 +844,94 @@ export function listBeacons(minimum: number, limit = 200) {
   `;
 }
 
+// --- repairing a letter nobody can open -------------------------------------
+
+/** The sender's own view of one letter, for checking a repair against. */
+export function findLetterForSender(letterId: string, senderId: string) {
+  return one<{
+    id: string;
+    nest_id: string;
+    sender_id: string;
+    mode: string;
+    departed_at: Date;
+    arrives_at: Date;
+  }>(sql`
+    select l.id, l.nest_id, l.sender_id, l.mode, l.departed_at, l.arrives_at
+    from letters l
+    join nests n on n.id = l.nest_id
+    where l.id = ${letterId}
+      and l.sender_id = ${senderId}
+      and (n.low_user_id = ${senderId} or n.high_user_id = ${senderId})
+      and n.status = 'active'
+  `);
+}
+
+
+/**
+ * Ask the sender to seal this one again.
+ *
+ * Only the recipient may ask, and only inside their own active nest. The
+ * request carries no reason and no key material: the server neither knows nor
+ * needs to know why the words would not open.
+ *
+ * Deliberately allowed while the pigeon is still flying. The manifest is
+ * released on departure, so a device that has lost its keys finds out it
+ * cannot read this letter long before it lands — and repairing it then means
+ * it is readable the moment it arrives, rather than arriving broken and
+ * needing a second round trip to fix.
+ */
+export async function requestReseal(letterId: string, userId: string): Promise<boolean> {
+  const rows = await sql<{ id: string }>`
+    update letters set reseal_requested_at = now()
+    where id = ${letterId}
+      and sender_id <> ${userId}
+      and nest_id in (
+        select id from nests
+        where (low_user_id = ${userId} or high_user_id = ${userId}) and status = 'active'
+      )
+    returning id
+  `;
+  return rows.length === 1;
+}
+
+/**
+ * Replace a letter's ciphertext with one sealed for the keys the recipient
+ * holds now.
+ *
+ * Everything about the journey stays as it was: the same row, the same bird,
+ * the same departure and the same arrival. Only the session header and the
+ * two ciphertexts change, because only they were addressed to the key that
+ * went missing. `opened_at` is cleared so the letter can be collected again,
+ * and the request is cleared with it.
+ *
+ * The timing columns are matched in the predicate rather than written, so a
+ * caller cannot use a repair to move a letter through time.
+ */
+export async function resealLetter(input: {
+  letterId: string;
+  senderId: string;
+  header: unknown;
+  manifest: string;
+  body: string;
+  departedAt: Date;
+  arrivesAt: Date;
+}): Promise<boolean> {
+  const rows = await sql<{ id: string }>`
+    update letters set
+      header = ${JSON.stringify(input.header)}::jsonb,
+      manifest = ${input.manifest},
+      body = ${input.body},
+      opened_at = null,
+      reseal_requested_at = null
+    where id = ${input.letterId}
+      and sender_id = ${input.senderId}
+      and departed_at = ${input.departedAt}
+      and arrives_at = ${input.arrivesAt}
+    returning id
+  `;
+  return rows.length === 1;
+}
+
 // --- the archive ------------------------------------------------------------
 
 export interface ArchiveEntryRow extends Row {
@@ -885,6 +974,24 @@ export async function putArchiveEntries(
       do update set blob = excluded.blob, updated_at = now()
     `;
   }
+}
+
+/**
+ * Drop the one-time prekeys nobody has taken yet.
+ *
+ * For a device that has lost its secrets: the public halves still on the
+ * server are worse than useless, because the next letter would be sealed
+ * against one and arrive unopenable. Claimed keys are deliberately left
+ * alone — they belong to letters already in flight, and their ids must stay
+ * spent so the high-water mark never reissues one.
+ */
+export async function deleteUnclaimedPreKeys(userId: string): Promise<number> {
+  const rows = await sql<{ id: number }>`
+    delete from one_time_prekeys
+    where user_id = ${userId} and claimed_at is null
+    returning id
+  `;
+  return rows.length;
 }
 
 /** How many letters this account is keeping. */

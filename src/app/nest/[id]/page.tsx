@@ -205,8 +205,9 @@ function LetterCard({ letter }: { letter: Letter }) {
     return (
       <Panel>
         <p className="text-[0.95rem] leading-relaxed font-semibold text-ink-faint">
-          This letter was read on another device and is still syncing across.
-          It will appear here shortly; pull down to refresh if it does not.
+          This device does not have the key this letter was sealed for —
+          either it was read somewhere else, or this browser was cleared since
+          it was sent. Both fix themselves: the words are on their way back.
         </p>
       </Panel>
     );

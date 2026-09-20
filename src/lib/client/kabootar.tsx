@@ -59,6 +59,8 @@ import {
   generateInitialPreKeys,
   generateMoreOneTimePreKeys,
   preKeySecretsFor,
+  preKeyStoreState,
+  reKeyDevice,
   rotateSignedPreKey,
 } from './prekeys';
 import { placesFor, rememberPlaces, type NestPlaces } from './places';
@@ -133,6 +135,7 @@ interface RawLetter {
   departedAt: number;
   arrivesAt: number;
   openedAt: number | null;
+  resealRequested: boolean;
 }
 
 export interface Letter {
@@ -266,6 +269,43 @@ export function KabootarProvider({ children }: { children: ReactNode }) {
 
     setMe(profile);
     setNests(nestList.nests);
+
+    /*
+     * Has this device lost the secrets for the keys it published?
+     *
+     * A restore rebuilds the identity from the phrase, but prekey secrets are
+     * random rather than derived, so a cleared browser loses them. The server
+     * carries on advertising the public halves and every letter sealed
+     * against one arrives unopenable — and because the pool looks full and
+     * the signed prekey looks young, neither the top-up below nor the
+     * rotation after it would ever fire. It stayed broken silently.
+     *
+     * Only `empty` re-keys. `unreadable` means the store exists but did not
+     * decrypt, where replacing the keys would strand letters still in flight
+     * that this device can in fact open once the real problem is fixed.
+     */
+    const keyState = await preKeyStoreState(id, profile.signedPreKey.id);
+
+    if (keyState === 'empty') {
+      const fresh = await reKeyDevice(
+        id,
+        profile.signedPreKey.id + 1,
+        profile.preKeys.batchSize,
+        profile.preKeys.nextId,
+      );
+
+      await post('/api/keys', {
+        signedPreKey: fresh.signedPreKey,
+        oneTimePreKeys: fresh.oneTimePreKeys,
+        replaceOneTimePreKeys: true,
+      });
+
+      // The profile just went stale in two fields, and both guards below read
+      // them. Re-keying has already published a full pool and a new signed
+      // prekey, so there is nothing left for either to do.
+      profile.preKeys.needsTopUp = false;
+      profile.signedPreKey.needsRotation = false;
+    }
 
     // Keep the one-time prekey pool full so letters keep their per-letter
     // forward secrecy. Running dry is not fatal, but it is worth avoiding.
@@ -473,6 +513,63 @@ export function KabootarProvider({ children }: { children: ReactNode }) {
     return result.pigeon;
   }, []);
 
+  /**
+   * Seal a letter again for the keys your partner holds now.
+   *
+   * They asked because the letter would not open: the device it was addressed
+   * to no longer has the key, which is what clearing a browser does. You still
+   * have the words, so nothing is lost — the same row is re-sealed against a
+   * fresh bundle and the journey it already made is left exactly alone.
+   *
+   * It runs by itself when the letters load. There is nothing useful to ask a
+   * person here: the answer is always yes, and the alternative is a letter
+   * that stays unreadable until somebody notices a button.
+   */
+  const repairLetter = useCallback(
+    async (nestId: string, raw: RawLetter, kept: ArchivedLetter): Promise<boolean> => {
+      const id = identityRef.current;
+      if (!id) return false;
+
+      try {
+        const bundle = await post<PreKeyBundle>(`/api/nests/${nestId}/bundle`);
+        const session = initiateSession(id, bundle);
+
+        const header: EnvelopeHeader = {
+          v: 1,
+          nestId,
+          senderId: id.id,
+          session: session.header,
+          // The journey is not re-made. Anything else here is refused by the
+          // server and by the SQL underneath it.
+          departedAt: raw.departedAt,
+          arrivesAt: raw.arrivesAt,
+          mode: raw.mode,
+        };
+
+        const sealed = sealLetter({
+          sharedSecret: session.sharedSecret,
+          associatedData: session.associatedData,
+          header,
+          manifest: kept.manifest,
+          body: { text: kept.text, writtenAt: kept.writtenAt },
+        });
+
+        await post(`/api/letters/${raw.id}/reseal`, {
+          header,
+          manifest: sealed.manifest,
+          body: sealed.body,
+        });
+
+        return true;
+      } catch {
+        // Offline, or their keys are not published yet. It will be asked for
+        // again next time the letters load.
+        return false;
+      }
+    },
+    [],
+  );
+
   const sendLetter = useCallback<KabootarValue['sendLetter']>(
     async ({ nestId, pigeon, text, mode, from, to }) => {
       const id = identityRef.current;
@@ -579,6 +676,11 @@ export function KabootarProvider({ children }: { children: ReactNode }) {
         // Letters you wrote read from your own archive; the session that
         // encrypted them was never kept.
         if (raw.mine) {
+          // They could not open this one. You still have it, so fix it.
+          if (raw.resealRequested && stored) {
+            void repairLetter(nestId, raw, stored);
+          }
+
           out.push({
             ...base,
             manifest: stored?.manifest ?? null,
@@ -605,7 +707,7 @@ export function KabootarProvider({ children }: { children: ReactNode }) {
 
       return out.sort((a, b) => b.departedAt - a.departedAt);
     },
-    [nests],
+    [nests, repairLetter],
   );
 
   const value = useMemo<KabootarValue>(
@@ -682,9 +784,24 @@ async function decryptIncoming(
     raw.header.session.oneTimePreKeyId,
   );
 
-  // A burned prekey means this letter was already opened and archived on some
-  // device. It cannot be opened again — that is forward secrecy working.
-  if (!secrets) return { ...base, status: 'locked' };
+  /*
+   * No secret for the keys this letter names. Two very different reasons:
+   *
+   * Either it was already opened on some device and the prekey was burned,
+   * which is forward secrecy working as intended and the archive will bring
+   * the words back; or this device never had that secret at all, because the
+   * browser it was sealed for was cleared. The two are indistinguishable from
+   * here, so ask for a repair either way. The sender's copy answers it if one
+   * is needed, and the request is harmless if the archive gets there first.
+   */
+  if (!secrets) {
+    // Asked once. The flag comes back on the letter, so a list that refreshes
+    // every few seconds does not keep asking for the same repair.
+    if (!raw.resealRequested) {
+      void post(`/api/letters/${raw.id}/reseal-request`).catch(() => {});
+    }
+    return { ...base, status: 'locked' };
+  }
 
   try {
     const session = acceptSession({

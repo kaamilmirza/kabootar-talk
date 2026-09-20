@@ -48,6 +48,82 @@ async function save(identity: Identity, keys: StoredKeys): Promise<void> {
   await idb(STORES.prekeys, 'readwrite', (s) => s.put(blob, identity.id));
 }
 
+/**
+ * Whether this device can still open letters addressed to it.
+ *
+ * A device restored from the recovery phrase rebuilds the identity but not
+ * these secrets: they are random, not derived, so a cleared browser loses
+ * them for good. The server meanwhile keeps advertising the public halves,
+ * and every letter sealed against them arrives unopenable. Nothing used to
+ * notice, which made a wipe silently permanent.
+ *
+ * The three answers are kept apart on purpose. `empty` means this device has
+ * no usable secret and should re-key. `unreadable` means the store is there
+ * but did not decrypt, which is a different problem — a locked vault, a
+ * half-written blob — and re-keying on it would throw away working keys and
+ * strand letters that are still in the air. Only `empty` is safe to act on.
+ */
+export type PreKeyStoreState = 'healthy' | 'empty' | 'unreadable';
+
+export async function preKeyStoreState(
+  identity: Identity,
+  signedPreKeyId: number,
+): Promise<PreKeyStoreState> {
+  const blob = await idb<string | undefined>(STORES.prekeys, 'readonly', (s) =>
+    s.get(identity.id),
+  );
+
+  if (blob === undefined) return 'empty';
+
+  let keys: StoredKeys;
+  try {
+    keys = JSON.parse(
+      new TextDecoder().decode(open(storeKey(identity), unb64(blob), AAD)),
+    ) as StoredKeys;
+  } catch {
+    return 'unreadable';
+  }
+
+  // The bundle the server hands out names one signed prekey. Without its
+  // secret nothing addressed to this account can be opened here, whatever
+  // else the store happens to contain.
+  return keys.signed[signedPreKeyId] ? 'healthy' : 'empty';
+}
+
+/**
+ * Everything this device needs to start receiving again, after a restore.
+ *
+ * A fresh signed prekey under a new id, and a fresh pool. The caller publishes
+ * these with `replaceOneTimePreKeys`, which clears the unclaimed keys whose
+ * secrets went down with the old device. Claimed ones are left alone: those
+ * belong to letters already in the air, and their ids must never come back.
+ */
+export async function reKeyDevice(
+  identity: Identity,
+  signedPreKeyId: number,
+  batch: number,
+  startId: number,
+): Promise<GeneratedPreKeys> {
+  const signed = createSignedPreKey(identity, signedPreKeyId);
+  const oneTime = createOneTimePreKeys(batch, startId + 1);
+
+  // Anything already here is unusable by definition, so this replaces rather
+  // than merges. Merging would keep dead ids around to be handed out again.
+  await save(identity, {
+    signed: { [signed.record.id]: signed.record.secretKey },
+    oneTime: Object.fromEntries(oneTime.map((k) => [k.id, k.secretKey])),
+  });
+
+  return {
+    signedPreKey: {
+      id: signed.record.id,
+      publicKey: signed.record.publicKey,
+      signature: signed.signature,
+    },
+    oneTimePreKeys: oneTime.map(publicOf),
+  };
+}
+
 export interface GeneratedPreKeys {
   signedPreKey: { id: number; publicKey: string; signature: string };
   oneTimePreKeys: Array<{ id: number; publicKey: string }>;
