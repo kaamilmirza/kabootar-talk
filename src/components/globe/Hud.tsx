@@ -527,8 +527,8 @@ function Timeline({ store, flight, getNow }: { store: GlobeStore; flight: GlobeF
 // --- labels -------------------------------------------------------------------
 
 /**
- * Keeps the globe's name tags readable: never on top of each other, and
- * never under a panel.
+ * Keeps the globe's name tags readable: never on top of each other, never
+ * under a panel, and never cut off by the edge of the screen.
  *
  * Each tag says whether it would like to be seen (`data-want`) and how much
  * it matters (`data-priority`). A few times a second, the most important
@@ -557,7 +557,9 @@ function useLabelManager(root: React.RefObject<HTMLDivElement | null>) {
         let show = tag.dataset.want === '1';
         if (show) {
           const rect = tag.getBoundingClientRect();
-          if (obstacles.some((o) => overlaps(rect, o)) || placed.some((p) => overlaps(rect, p))) show = false;
+          // Half a tag hanging off the edge of the screen reads as a glitch.
+          const offscreen = rect.left < 4 || rect.top < 4 || rect.right > window.innerWidth - 4 || rect.bottom > window.innerHeight - 4;
+          if (offscreen || obstacles.some((o) => overlaps(rect, o)) || placed.some((p) => overlaps(rect, p))) show = false;
           else placed.push(rect);
         }
         const value = show ? 'true' : 'false';
