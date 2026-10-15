@@ -13,16 +13,16 @@
 
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { Beacon } from '@/components/globe/Beacons';
+import { GlobeBoundary } from '@/components/globe/GlobeBoundary';
+import { GlobeSheet } from '@/components/globe/GlobeSheet';
 import { Guard } from '@/components/Guard';
 import { Kabootar } from '@/components/ui/Kabootar';
 import { Notice, Panel, TextButton } from '@/components/ui/primitives';
 import { get, post } from '@/lib/client/api';
 import { searchCities } from '@/lib/cities';
-import { distanceKm } from '@/lib/flight/geo';
-import { buildItinerary, plannedDurationMs } from '@/lib/flight/schedule';
 
 const GlobeCanvas = dynamic(() => import('@/components/globe/GlobeCanvas'), {
   ssr: false,
@@ -105,34 +105,38 @@ function World() {
     }
   };
 
-  // A still globe needs something to look at; this simply holds the camera.
+  // Drives the sun and the clouds; there is no letter on this screen.
   const getNow = useCallback(() => Date.now(), []);
-  const itinerary = useIdleItinerary();
+  const beacons = useMemo(() => world?.cities ?? [], [world]);
 
   return (
-    <div className="flex min-h-dvh flex-col bg-sky-100">
-      <div className="relative h-[46dvh] min-h-[280px] shrink-0">
-        <GlobeCanvas itinerary={itinerary} getNow={getNow} beacons={world?.cities ?? []} />
-        <Link
-          href="/"
-          className="absolute top-[max(1rem,env(safe-area-inset-top))] left-4 z-10 rounded-2xl border-2 border-line bg-paper px-4 py-2 text-[0.85rem] font-extrabold text-ink-soft uppercase shadow-[0_3px_0_var(--color-line)]"
-        >
-          &lsaquo; Coop
-        </Link>
-      </div>
+    <div className="relative h-dvh w-full overflow-hidden bg-[#0c1236]">
+      <GlobeBoundary>
+        <GlobeCanvas flights={NO_FLIGHTS} getNow={getNow} beacons={beacons} autoRotate />
+      </GlobeBoundary>
+      <Link
+        href="/"
+        className="absolute top-[max(1rem,env(safe-area-inset-top))] left-4 z-30 rounded-2xl border-2 border-line bg-paper px-4 py-2 text-[0.85rem] font-extrabold text-ink-soft uppercase shadow-[0_3px_0_var(--color-line)]"
+      >
+        &lsaquo; Coop
+      </Link>
 
-      <div className="relative -mt-6 flex-1 rounded-t-[2rem] border-t-2 border-line bg-cream">
-        <div className="shell pt-6">
-          <h1 className="mb-1 text-[1.6rem] leading-tight font-extrabold text-ink">
-            Kabootars of the world
-          </h1>
-          <p className="mb-5 text-[0.95rem] leading-relaxed font-bold text-ink-faint">
-            {world === null
-              ? 'Looking…'
-              : world.cities.length === 0
-                ? 'Nowhere on the map yet. Cities appear once a few people have added them.'
-                : `${world.cities.length} ${world.cities.length === 1 ? 'city' : 'cities'} sending letters.`}
-          </p>
+      <GlobeSheet
+        summary={
+          <>
+            <h1 className="mb-1 text-[1.4rem] leading-tight font-extrabold text-ink">Kabootars of the world</h1>
+            <p className="text-[0.95rem] leading-relaxed font-bold text-ink-faint">
+              {world === null
+                ? 'Looking…'
+                : world.cities.length === 0
+                  ? 'Nowhere on the map yet. Cities appear once a few people have added them.'
+                  : `${world.cities.length} ${world.cities.length === 1 ? 'city' : 'cities'} sending letters.`}
+            </p>
+          </>
+        }
+        detailsLabel="Your city"
+        details={
+        <div>
 
           {joined ? (
             <Notice tone="grass">
@@ -191,37 +195,17 @@ function World() {
             </ol>
           ) : null}
 
-          <div className="pb-6 text-center">
+          <div className="pb-2 text-center">
             <TextButton onClick={() => void get<WorldResponse>('/api/world').then(setWorld)}>
               Refresh
             </TextButton>
           </div>
         </div>
-      </div>
+        }
+      />
     </div>
   );
 }
 
-/**
- * A slow idle circuit, purely so the globe has a reason to turn.
- *
- * No real letter is involved and none is implied — this is the map, not a
- * flight, and nothing here corresponds to anybody's actual pigeon.
- */
-function useIdleItinerary() {
-  const [itinerary] = useState(() => {
-    const from = { lat: 20, lon: -60 };
-    const to = { lat: 35, lon: 100 };
-    const departedAt = Date.now() - 6 * 3_600_000;
-
-    return buildItinerary({
-      from,
-      to,
-      departedAt,
-      arrivesAt: departedAt + plannedDurationMs(distanceKm(from, to)) * 4,
-      seed: 'world-map-idle',
-    });
-  });
-
-  return itinerary;
-}
+/** Stable, so the globe is not handed a new list every render. */
+const NO_FLIGHTS: never[] = [];

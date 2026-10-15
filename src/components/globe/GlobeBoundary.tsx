@@ -48,13 +48,15 @@ export class GlobeBoundary extends Component<Props, State> {
     if (!this.state.failed) return this.props.children;
 
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-        <Kabootar mood="worried" className="size-20" />
-        <p className="text-[0.95rem] leading-relaxed font-bold text-ink-soft">
-          The map would not load on this device.
-          <br />
-          Your letter is fine — it is still on its way.
-        </p>
+      <div className="flex h-full items-center justify-center px-6">
+        <div className="flex max-w-xs flex-col items-center gap-3 rounded-3xl border-2 border-line bg-paper p-5 text-center shadow-[0_4px_0_var(--color-line)]">
+          <Kabootar mood="worried" className="size-20" />
+          <p className="text-[0.95rem] leading-relaxed font-bold text-ink-soft">
+            The map would not load on this device.
+            <br />
+            Your letter is fine — it is still on its way.
+          </p>
+        </div>
       </div>
     );
   }

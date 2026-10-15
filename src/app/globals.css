@@ -381,3 +381,57 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/*
+ * The globe's own space.
+ *
+ * The one place the app goes dark: a night sky, so the planet, its air and
+ * the pigeons' trails stand out. Everything pressable over it keeps the
+ * usual solid paper look.
+ */
+.globe-space {
+  background:
+    radial-gradient(ellipse at 50% 42%, #2b3a7a 0%, #172156 38%, #0c1236 72%, #070a22 100%);
+}
+
+/* Name tags that float over things on the globe. */
+.globe-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+  border: 2px solid var(--color-line);
+  border-radius: 999px;
+  background: var(--color-paper);
+  padding: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: var(--color-ink-soft);
+  box-shadow: 0 2px 0 var(--color-line);
+  opacity: 0;
+  transition: opacity 180ms ease;
+  user-select: none;
+  /*
+   * Lifted on screen rather than in 3D: seen from overhead, "above" the bird
+   * in the world points straight at the camera and the tag would cover her.
+   */
+  transform: translateY(-1.9rem);
+}
+
+/* Shown only when the label manager has found it room. */
+.globe-tag[data-shown='true'] {
+  opacity: 1;
+}
+
+.globe-tag-bird[data-active='true'] {
+  border-color: var(--tag);
+  box-shadow: 0 3px 0 var(--tag);
+  color: var(--color-ink);
+}
+
+.globe-tag-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 999px;
+  background: var(--tag);
+}

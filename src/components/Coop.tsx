@@ -120,7 +120,20 @@ export function Coop() {
         <Pairing />
       </section>
 
-      <div className="mt-7">
+      <div className="mt-7 flex flex-col gap-3">
+        <Link
+          href="/sky"
+          className="press flex items-center gap-3 border-2 border-amber-400 bg-amber-100 p-4 shadow-[0_var(--lip)_0_var(--color-amber-400)]"
+        >
+          <span className="text-2xl">🕊️</span>
+          <span className="min-w-0 flex-1 text-left">
+            <span className="block text-[1rem] font-extrabold text-ink">Pigeons in the air</span>
+            <span className="block text-[0.8rem] font-bold text-amber-600">
+              Every letter on its way, on one globe
+            </span>
+          </span>
+          <span className="text-xl text-amber-600">&rsaquo;</span>
+        </Link>
         <Link
           href="/world"
           className="press flex items-center gap-3 border-2 border-sky-400 bg-sky-100 p-4 shadow-[0_var(--lip)_0_var(--color-sky-400)]"

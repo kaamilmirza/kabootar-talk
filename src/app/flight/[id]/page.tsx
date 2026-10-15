@@ -5,6 +5,8 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { FlightView } from '@/components/FlightView';
+import { skyFlights } from '@/components/globe/sky';
+import type { GlobeFlight } from '@/components/globe/GlobeCanvas';
 import { Guard } from '@/components/Guard';
 import { Kabootar } from '@/components/ui/Kabootar';
 import { Screen } from '@/components/ui/primitives';
@@ -21,12 +23,14 @@ export default function FlightPage() {
 
 function Flight() {
   const { id } = useParams<{ id: string }>();
-  const { status, nests, loadLetters } = useKabootar();
+  const { status, nests, loadLetters, loadSky } = useKabootar();
 
   const [itinerary, setItinerary] = useState<Itinerary | null>(null);
   const [pigeonName, setPigeonName] = useState<string | null>(null);
   const [nestId, setNestId] = useState<string | null>(null);
+  const [mine, setMine] = useState(false);
   const [missing, setMissing] = useState(false);
+  const [others, setOthers] = useState<GlobeFlight[]>([]);
 
   useEffect(() => {
     if (status !== 'ready') return;
@@ -49,6 +53,7 @@ function Flight() {
         if (built) {
           setItinerary(built);
           setPigeonName(letter.pigeonName);
+          setMine(letter.mine);
           setNestId(nest.id);
           return;
         }
@@ -58,16 +63,31 @@ function Flight() {
     })();
   }, [id, loadLetters, nests, status]);
 
+  // The rest of the flock, drawn fainter around this bird. Read-only: see
+  // `loadSky` for why this does not go through `loadLetters`.
+  useEffect(() => {
+    if (status !== 'ready') return;
+    let cancelled = false;
+    void loadSky()
+      .then((letters) => {
+        if (!cancelled) setOthers(skyFlights(letters).filter((f) => f.id !== id));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [id, loadSky, status]);
+
   if (itinerary) {
     return (
       <div className="relative">
         <Link
           href={nestId ? `/nest/${nestId}` : '/'}
-          className="absolute top-[max(1rem,env(safe-area-inset-top))] left-4 z-10 rounded-2xl border-2 border-line bg-paper px-4 py-2 text-[0.85rem] font-extrabold text-ink-soft uppercase shadow-[0_3px_0_var(--color-line)]"
+          className="absolute top-[max(1rem,env(safe-area-inset-top))] left-4 z-30 rounded-2xl border-2 border-line bg-paper px-4 py-2 text-[0.85rem] font-extrabold text-ink-soft uppercase shadow-[0_3px_0_var(--color-line)]"
         >
           &lsaquo; Back
         </Link>
-        <FlightView itinerary={itinerary} pigeonName={pigeonName} />
+        <FlightView itinerary={itinerary} pigeonName={pigeonName} letterId={id} mine={mine} others={others} />
       </div>
     );
   }

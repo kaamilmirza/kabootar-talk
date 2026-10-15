@@ -156,6 +156,16 @@ export interface Letter {
   status: 'flying' | 'landed' | 'locked';
 }
 
+/** A letter's journey, for drawing on the globe. Never its words. */
+export interface SkyLetter {
+  id: string;
+  nestId: string;
+  mine: boolean;
+  pigeonName: string | null;
+  manifest: FlightManifest;
+  itinerary: ReturnType<typeof buildItinerary>;
+}
+
 export type Status = 'loading' | 'needs-setup' | 'locked' | 'ready';
 
 interface KabootarValue {
@@ -184,6 +194,11 @@ interface KabootarValue {
   setPlaces: (nestId: string, places: NestPlaces) => Promise<void>;
 
   loadLetters: (nestId: string) => Promise<Letter[]>;
+  /**
+   * Every pigeon in the air, and those that landed in the last few hours,
+   * across all nests — for the globe. Strictly read-only: see `loadSky`.
+   */
+  loadSky: () => Promise<SkyLetter[]>;
   loadFlock: (nestId: string) => Promise<Pigeon[]>;
   /** Feed her, make a fuss of her, push her on, or give her a new name. */
   tend: (
@@ -711,6 +726,72 @@ export function KabootarProvider({ children }: { children: ReactNode }) {
     [nests, repairLetter],
   );
 
+  /*
+   * The globe's view of every nest at once.
+   *
+   * Deliberately not built on `loadLetters`. Loading a nest's letters opens
+   * the ones that have landed: it archives the words, burns the one-time
+   * prekey, and tells the server the letter was read. That is right when
+   * someone opens a nest, and wrong when they are only looking at a map — a
+   * sender would see "opened" on a letter nobody has read.
+   *
+   * So this only ever reads. It takes the route from the local archive, or
+   * opens just the manifest, which needs the prekey but never consumes it.
+   * It never opens a body, never writes to the archive or the prekey store,
+   * never asks for a reseal, and never posts anything to the server. A letter
+   * it cannot read that way is simply left off the map.
+   */
+  const loadSky = useCallback<KabootarValue['loadSky']>(async () => {
+    const id = identityRef.current;
+    if (!id) return [];
+
+    const since = now() - SKY_RECENT_MS;
+    const out: SkyLetter[] = [];
+
+    for (const nest of nests) {
+      if (nest.status === 'pending') continue;
+
+      let letters: RawLetter[];
+      let archive: ArchivedLetter[];
+      try {
+        [{ letters }, archive] = await Promise.all([
+          get<{ letters: RawLetter[] }>(`/api/nests/${nest.id}/letters`),
+          readArchive(id, nest.id),
+        ]);
+      } catch {
+        continue;
+      }
+
+      const byId = new Map<string, ArchivedLetter>(archive.map((a) => [a.letterId, a]));
+
+      for (const raw of letters) {
+        if (raw.arrivesAt < since) continue;
+
+        const manifest = byId.get(raw.id)?.manifest ?? (raw.mine ? null : await peekManifest(id, nest, raw));
+        if (!manifest) continue;
+
+        out.push({
+          id: raw.id,
+          nestId: nest.id,
+          mine: raw.mine,
+          pigeonName: raw.pigeonName,
+          manifest,
+          itinerary: buildItinerary({
+            from: manifest.from,
+            to: manifest.to,
+            departedAt: raw.departedAt,
+            arrivesAt: raw.arrivesAt,
+            seed: raw.id,
+            mode: raw.mode,
+            pigeonId: raw.pigeonId ?? undefined,
+          }),
+        });
+      }
+    }
+
+    return out.sort((a, b) => a.itinerary.arrivesAt - b.itinerary.arrivesAt);
+  }, [nests]);
+
   const value = useMemo<KabootarValue>(
     () => ({
       status,
@@ -736,6 +817,7 @@ export function KabootarProvider({ children }: { children: ReactNode }) {
         if (identityRef.current) await rememberPlaces(identityRef.current, nestId, p);
       },
       loadLetters,
+      loadSky,
       loadFlock,
       tend,
       sendLetter,
@@ -744,11 +826,47 @@ export function KabootarProvider({ children }: { children: ReactNode }) {
       status, identity, me, nests, unlockMethod, error,
       createPhrase, finishSetup, unlockDevice, restoreFromPhrase, lock, forgetDevice,
       refresh, createInvite, redeemInvite, confirmNest, closeNest, safetyFor,
-      loadLetters, loadFlock, tend, sendLetter,
+      loadLetters, loadSky, loadFlock, tend, sendLetter,
     ],
   );
 
   return <KabootarContext.Provider value={value}>{children}</KabootarContext.Provider>;
+}
+
+/** How long a landed letter's route stays on the globe. */
+const SKY_RECENT_MS = 6 * 3_600_000;
+
+/**
+ * Open only a letter's manifest — where it flies from and to — without
+ * consuming anything.
+ *
+ * Reads the prekey secrets but never burns them, and never touches the body,
+ * so the letter is exactly as openable afterwards as before. Null whenever
+ * that is not possible; the caller leaves the letter off the map.
+ */
+async function peekManifest(identity: Identity, nest: Nest, raw: RawLetter): Promise<FlightManifest | null> {
+  try {
+    const secrets = await preKeySecretsFor(
+      identity,
+      raw.header.session.signedPreKeyId,
+      raw.header.session.oneTimePreKeyId,
+    );
+    if (!secrets) return null;
+
+    const session = acceptSession({
+      self: identity,
+      senderIdentityKey: nest.partner.identityKey,
+      header: raw.header.session,
+      ...secrets,
+    });
+
+    return openManifest(
+      { sharedSecret: session.sharedSecret, associatedData: session.associatedData, header: raw.header },
+      raw.manifest,
+    );
+  } catch {
+    return null;
+  }
 }
 
 /**
